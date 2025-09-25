@@ -52,6 +52,15 @@
                            bg-green-600 hover:bg-green-700 text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-gray-900">
                 Start Recording
             </button>
+            <button id="toggle-camera-btn"
+                    class="w-full sm:w-1/2 p-4 rounded-full text-lg font-medium transition-all duration-300 button-shadow
+                           bg-gray-600 hover:bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-900 flex items-center justify-center space-x-2">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6">
+                    <path d="M12 8c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zM12 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/>
+                    <path d="M12 2c-5.52 0-10 4.48-10 10s4.48 10 10 10 10-4.48 10-10-4.48-10-10-10zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zM12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm-4 7h8v2h-8v-2z"/>
+                </svg>
+                <span>Flip Camera</span>
+            </button>
             <a id="download-link" href="#" download="recorded-video.webm"
                class="w-full sm:w-1/2 p-4 text-center rounded-full text-lg font-medium transition-all duration-300 button-shadow
                       bg-blue-600 hover:bg-blue-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900 hidden">
@@ -83,6 +92,7 @@
         const canvas = document.getElementById('video-canvas');
         const context = canvas.getContext('2d');
         const startStopBtn = document.getElementById('start-stop-btn');
+        const toggleCameraBtn = document.getElementById('toggle-camera-btn');
         const downloadLink = document.getElementById('download-link');
         const statusMessage = document.getElementById('status-message');
         const messageModal = document.getElementById('message-modal');
@@ -98,6 +108,7 @@
         let lon = null;
         let recording = false;
         let animationFrameId;
+        let facingMode = 'user'; // 'user' for front camera, 'environment' for back
 
         // Utility function to show a custom modal instead of alert()
         function showModal(title, message) {
@@ -150,9 +161,14 @@
 
         // Get video stream and start the drawing loop
         async function getVideoStream() {
+            // Stop existing stream if it exists
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+            }
+
             try {
                 videoStream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: 'user' }, // Use 'user' for front camera, 'environment' for back
+                    video: { facingMode: facingMode }, // Use the current facingMode
                     audio: true
                 });
                 video.srcObject = videoStream;
@@ -236,6 +252,17 @@
                 startStopBtn.classList.add('hidden');
             }
         });
+
+        toggleCameraBtn.addEventListener('click', () => {
+            if (recording) {
+                showModal('Cannot Switch Camera', 'Please stop the current recording before switching cameras.');
+                return;
+            }
+            // Toggle the camera mode
+            facingMode = facingMode === 'user' ? 'environment' : 'user';
+            getVideoStream();
+        });
+
 
         function stopRecording() {
             if (animationFrameId) {
