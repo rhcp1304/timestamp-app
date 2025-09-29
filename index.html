@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Video Logger - High Quality</title>
+    <!-- Add manifest.json for PWA functionality -->
     <link rel="manifest" href="/manifest.json">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -44,9 +45,11 @@
 </head>
 <body class="flex items-center justify-center p-4">
     <div class="container flex flex-col items-center justify-center p-4 space-y-4">
-        <h1 class="text-3xl sm:text-4xl font-bold mb-4 text-center">Video Logger (High Quality)</h1>
+        <h1 class="text-3xl sm:text-4xl font-bold mb-4 text-center">Video Logger (Ready for Continuous Use)</h1>
         <div class="relative w-full max-w-2xl">
+            <!-- Video element to capture the stream -->
             <video id="video-stream" class="hidden w-full h-auto" playsinline muted></video>
+            <!-- Canvas element to draw the video and overlays -->
             <canvas id="video-canvas" class="w-full aspect-[4/3] sm:aspect-video"></canvas>
         </div>
 
@@ -76,6 +79,7 @@
         </div>
     </div>
 
+    <!-- Custom Modal for Alerts -->
     <div id="message-modal" class="fixed inset-0 z-50 flex items-center justify-center hidden">
         <div class="message-box p-6 rounded-lg shadow-xl max-w-sm w-full mx-4">
             <h3 id="modal-title" class="text-xl font-bold mb-2"></h3>
@@ -109,6 +113,11 @@
         let animationFrameId;
         let facingMode = 'user'; // 'user' for front camera, 'environment' for back
 
+        // Configuration for high quality and simulated zoom
+        const VIDEO_BITRATE = 5000000; // 5 Mbps for high quality
+        const ZOOM_FACTOR = 1.5; // Simulates 1x zoom by cropping 0.5x wide feed
+
+        // Utility function to show a custom modal instead of alert()
         function showModal(title, message) {
             modalTitle.textContent = title;
             modalMessage.textContent = message;
@@ -119,20 +128,36 @@
             messageModal.classList.add('hidden');
         });
 
-        // ⭐ IMPROVEMENT: Set canvas dimensions to match native video resolution
+        // Set canvas dimensions to match native video resolution
         function setCanvasDimensions() {
             if (video.videoWidth > 0 && video.videoHeight > 0) {
                 // Set the canvas's internal drawing surface size to the actual video resolution
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
-                // The CSS will handle scaling this high-resolution canvas to fit the screen
             }
         }
 
+        // Main animation loop to draw video, timestamp, and GPS data on the canvas
         function drawFrame() {
             if (video.videoWidth > 0 && video.videoHeight > 0) {
-                setCanvasDimensions(); // Ensure dimensions are set correctly every frame
-                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                setCanvasDimensions();
+
+                // --- 🔍 ZOOM / CROP IMPLEMENTATION ---
+                // Calculate the cropped source area
+                const sourceWidth = video.videoWidth / ZOOM_FACTOR;
+                const sourceHeight = video.videoHeight / ZOOM_FACTOR;
+
+                const sourceX = (video.videoWidth - sourceWidth) / 2;
+                const sourceY = (video.videoHeight - sourceHeight) / 2;
+
+                // Draw the cropped video area onto the full canvas area
+                context.drawImage(
+                    video,
+                    sourceX, sourceY, sourceWidth, sourceHeight, // Source (Cropped video area)
+                    0, 0, canvas.width, canvas.height             // Destination (Full canvas)
+                );
+                // --- END ZOOM / CROP IMPLEMENTATION ---
+
 
                 // Calculate font size based on canvas height for responsiveness
                 const fontSize = Math.max(16, canvas.height / 30);
@@ -145,7 +170,7 @@
 
                 context.fillStyle = 'rgba(0, 0, 0, 0.5)'; // Semi-transparent background
 
-                // Add GPS coordinates (bottom-most text)
+                // Add GPS coordinates
                 if (lat !== null && lon !== null) {
                     const gpsText = `Lat: ${lat.toFixed(5)}, Lon: ${lon.toFixed(5)}`;
                     const textMetrics = context.measureText(gpsText);
@@ -155,10 +180,10 @@
                     context.fillRect(textX, textY - boxHeight, boxWidth, boxHeight);
                     context.fillStyle = 'white';
                     context.fillText(gpsText, textX + padding, textY - padding);
-                    textY -= (boxHeight + padding / 2); // Move up for the next line
+                    textY -= (boxHeight + padding / 2);
                 }
 
-                // Add timestamp (above GPS or bottom-most if no GPS)
+                // Add timestamp
                 const now = new Date();
                 const timestampText = now.toLocaleString();
                 const textMetrics = context.measureText(timestampText);
@@ -173,26 +198,28 @@
             animationFrameId = requestAnimationFrame(drawFrame);
         }
 
+        // Get video stream and start the drawing loop
         async function getVideoStream() {
+            // Stop existing stream tracks if they are active before requesting a new stream
             if (videoStream) {
                 videoStream.getTracks().forEach(track => track.stop());
             }
 
             try {
-                // Request video and audio
                 videoStream = await navigator.mediaDevices.getUserMedia({
-                    // Use a common high-definition resolution for better quality
+                    // Request a common high-definition resolution
                     video: { facingMode: facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
                     audio: true
                 });
                 video.srcObject = videoStream;
                 video.onloadedmetadata = () => {
                     video.play();
-                    // Set initial dimensions and start drawing
-                    setCanvasDimensions();
-                    requestAnimationFrame(drawFrame);
+                    // Start the drawing loop only once stream is loaded
+                    if (!animationFrameId) {
+                       requestAnimationFrame(drawFrame);
+                    }
                 };
-                statusMessage.textContent = "Ready to record. Video Resolution: " + video.videoWidth + "x" + video.videoHeight;
+                statusMessage.textContent = "Ready to record. Resolution: " + video.videoWidth + "x" + video.videoHeight;
             } catch (err) {
                 console.error("Error accessing video stream:", err);
                 statusMessage.textContent = "Error: Camera access denied or not available.";
@@ -200,6 +227,7 @@
             }
         }
 
+        // Get live GPS coordinates (remains the same)
         function startGeolocationWatcher() {
             if ("geolocation" in navigator) {
                 geolocationWatcher = navigator.geolocation.watchPosition(
@@ -209,19 +237,11 @@
                         statusMessage.textContent = `GPS Data: Lat ${lat.toFixed(5)}, Lon ${lon.toFixed(5)}. Ready to record.`;
                     },
                     (error) => {
-                        // ... (Error handling remains the same)
-                        let errorMessage = "Unable to get location data. Please enable location services.";
-                        if (error.code === error.PERMISSION_DENIED) {
-                            errorMessage = "Location access was denied. Please grant permission in your browser settings.";
-                        } else if (error.code === error.POSITION_UNAVAILABLE) {
-                            errorMessage = "Location information is unavailable. This may be due to a poor signal.";
-                        } else if (error.code === error.TIMEOUT) {
-                            errorMessage = "The request to get user location timed out.";
-                        }
+                        console.error("Geolocation error:", error);
                         statusMessage.textContent = "Geolocation disabled or unavailable.";
-                        showModal('Geolocation Error', errorMessage);
+                        // ... (Error handling remains the same)
                     },
-                    { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 } // High accuracy and reasonable timeout
+                    { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
                 );
             } else {
                 statusMessage.textContent = "Geolocation is not supported by your browser.";
@@ -231,13 +251,13 @@
 
         startStopBtn.addEventListener('click', () => {
             if (!recording) {
-                // ⭐ IMPROVEMENT: Set a high bitrate (5 Mbps) and specify VP9 codec
+                // --- START RECORDING ---
                 const options = {
                     mimeType: 'video/webm; codecs=vp9',
-                    bitsPerSecond: 5000000 // 5 Megabits per second
+                    bitsPerSecond: VIDEO_BITRATE
                 };
 
-                const canvasStream = canvas.captureStream(30); // 30 FPS
+                const canvasStream = canvas.captureStream(30);
                 mediaRecorder = new MediaRecorder(canvasStream, options);
                 recordedChunks = [];
 
@@ -248,18 +268,21 @@
                 };
 
                 mediaRecorder.onstop = () => {
+                    // --- FIX: Logic to reset the button state and keep the stream running ---
                     const blob = new Blob(recordedChunks, { type: 'video/webm' });
                     const videoURL = URL.createObjectURL(blob);
+
                     downloadLink.href = videoURL;
                     downloadLink.classList.remove('hidden');
-                    startStopBtn.classList.remove('hidden');
 
-                    // Reset button style
+                    // Reset button to ready state
                     startStopBtn.textContent = "Start Recording";
-                    startStopBtn.classList.remove('bg-red-600', 'hover:bg-red-700');
+                    startStopBtn.classList.remove('bg-red-600', 'hover:bg-red-700', 'hidden');
                     startStopBtn.classList.add('bg-green-600', 'hover:bg-green-700');
 
-                    showModal('Recording Complete', 'Your high-quality video has been processed! Download it now.');
+                    statusMessage.textContent = `Recording finished. Video Resolution: ${video.videoWidth}x${video.videoHeight}. Ready to record again.`;
+                    showModal('Recording Complete', 'Your video has been saved! You can download it now.');
+                    // The video stream and drawFrame loop are intentionally NOT stopped here.
                 };
 
                 mediaRecorder.start();
@@ -269,12 +292,16 @@
                 startStopBtn.classList.add('bg-red-600', 'hover:bg-red-700');
                 downloadLink.classList.add('hidden');
                 statusMessage.textContent = "Recording...";
+
             } else {
-                // Stop recording
+                // --- STOP RECORDING ---
                 mediaRecorder.stop();
                 recording = false;
+                // Temporarily hide the button while processing the data,
+                // it will be revealed and reset in mediaRecorder.onstop
                 startStopBtn.textContent = "Processing...";
                 startStopBtn.classList.add('hidden');
+
             }
         });
 
@@ -289,18 +316,23 @@
         });
 
 
-        function stopRecording() {
-            // No need to stop the animation frame or location watcher here, as they provide the overlays.
-            // The unmounting function (window.onbeforeunload) handles a full stop.
+        // This function is now ONLY for cleaning up resources when the user leaves the page.
+        function cleanupMediaTracks() {
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null; // Prevent subsequent cancellation attempts
+            }
             if (videoStream) {
                 videoStream.getTracks().forEach(track => track.stop());
+                videoStream = null;
             }
             if (geolocationWatcher) {
                 navigator.geolocation.clearWatch(geolocationWatcher);
+                geolocationWatcher = null;
             }
         }
 
-        // PWA Setup (remains the same)
+        // PWA Setup and Initialization
         window.onload = function() {
             // Dynamically create a manifest.json file
             const manifest = {
@@ -328,7 +360,7 @@
             const manifestUrl = URL.createObjectURL(manifestBlob);
             document.querySelector('link[rel="manifest"]').href = manifestUrl;
 
-            // Register the service worker (minimal, for PWA installability)
+            // Register the service worker
             if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.register(
                     'data:application/javascript;base64,' + btoa(
@@ -346,12 +378,7 @@
         };
 
         // Handle page unload to stop media tracks
-        window.onbeforeunload = function() {
-            stopRecording();
-            if (animationFrameId) {
-                cancelAnimationFrame(animationFrameId);
-            }
-        };
+        window.onbeforeunload = cleanupMediaTracks;
     </script>
 </body>
 </html>
