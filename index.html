@@ -112,6 +112,7 @@
         let recording = false;
         let animationFrameId;
         let facingMode = 'user'; // 'user' for front camera, 'environment' for back
+        let processingTimeout; // Timer for processing fallback
 
         // Configuration for high quality and simulated zoom
         const VIDEO_BITRATE = 5000000; // 5 Mbps for high quality
@@ -127,6 +128,32 @@
         modalOkBtn.addEventListener('click', () => {
             messageModal.classList.add('hidden');
         });
+
+        // Utility function to reset the button and state after processing
+        function resetRecordingState(wasSuccessful = true) {
+            // Clear the fallback timer if it exists, as processing is complete.
+            if (processingTimeout) {
+                clearTimeout(processingTimeout);
+                processingTimeout = null;
+            }
+
+            // Reset button state
+            startStopBtn.textContent = "Start Recording";
+            startStopBtn.disabled = false; // Re-enable button
+            startStopBtn.classList.remove('bg-red-600', 'hover:bg-red-700', 'bg-gray-400');
+            startStopBtn.classList.add('bg-green-600', 'hover:bg-green-700');
+
+            recording = false; // Ensure recording flag is false
+
+            if (wasSuccessful) {
+                statusMessage.textContent = `Recording finished. Video Resolution: ${video.videoWidth}x${video.videoHeight}. Ready to record again.`;
+                showModal('Recording Complete', 'Your video has been saved! You can download it now.');
+            } else {
+                statusMessage.textContent = `Error: Processing timed out. Please try recording again.`;
+                showModal('Processing Failed', 'The video file could not be finalized in time (5s timeout). Please try a shorter recording.');
+            }
+        }
+
 
         // Set canvas dimensions to match native video resolution
         function setCanvasDimensions() {
@@ -268,22 +295,16 @@
                 };
 
                 mediaRecorder.onstop = () => {
-                    // --- ONSTOP FIX: Re-enable the button and reset to Start Recording state ---
+                    console.log("MediaRecorder onstop fired."); // Debug log
+                    // Finalize the video blob
                     const blob = new Blob(recordedChunks, { type: 'video/webm' });
                     const videoURL = URL.createObjectURL(blob);
 
                     downloadLink.href = videoURL;
                     downloadLink.classList.remove('hidden');
 
-                    // Reset button state
-                    startStopBtn.textContent = "Start Recording";
-                    startStopBtn.disabled = false; // Re-enable button
-                    startStopBtn.classList.remove('bg-red-600', 'hover:bg-red-700', 'bg-gray-400');
-                    startStopBtn.classList.add('bg-green-600', 'hover:bg-green-700');
-                    startStopBtn.classList.remove('hidden'); // Ensure hidden class is removed just in case
-
-                    statusMessage.textContent = `Recording finished. Video Resolution: ${video.videoWidth}x${video.videoHeight}. Ready to record again.`;
-                    showModal('Recording Complete', 'Your video has been saved! You can download it now.');
+                    // Reset the UI and clear any potential timeout
+                    resetRecordingState(true);
                 };
 
                 mediaRecorder.start();
@@ -296,9 +317,9 @@
                 statusMessage.textContent = "Recording...";
 
             } else {
-                // --- STOP RECORDING FIX: Disable button and change text/color during processing ---
+                // --- STOP RECORDING FIX: Disable button and set timeout fallback ---
+                console.log("Stopping media recorder..."); // Debug log
                 mediaRecorder.stop();
-                recording = false;
 
                 // Change UI to reflect processing state: disable and grey out.
                 startStopBtn.textContent = "Processing...";
@@ -306,6 +327,14 @@
                 startStopBtn.classList.remove('bg-red-600', 'hover:bg-red-700');
                 startStopBtn.classList.add('bg-gray-400'); // Use neutral color
 
+                statusMessage.textContent = "Processing video file...";
+                downloadLink.classList.add('hidden'); // Ensure download link is hidden during processing
+
+                // Set a timeout fallback (5 seconds). If onstop doesn't fire, force UI reset.
+                processingTimeout = setTimeout(() => {
+                    console.error("Processing timeout reached. Forcing UI reset.");
+                    resetRecordingState(false); // Signal failure/timeout
+                }, 5000);
             }
         });
 
