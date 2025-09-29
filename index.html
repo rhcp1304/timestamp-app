@@ -268,39 +268,43 @@
                 };
 
                 mediaRecorder.onstop = () => {
-                    // --- FIX: Logic to reset the button state and keep the stream running ---
+                    // --- ONSTOP FIX: Re-enable the button and reset to Start Recording state ---
                     const blob = new Blob(recordedChunks, { type: 'video/webm' });
                     const videoURL = URL.createObjectURL(blob);
 
                     downloadLink.href = videoURL;
                     downloadLink.classList.remove('hidden');
 
-                    // Reset button to ready state
+                    // Reset button state
                     startStopBtn.textContent = "Start Recording";
-                    startStopBtn.classList.remove('bg-red-600', 'hover:bg-red-700', 'hidden');
+                    startStopBtn.disabled = false; // Re-enable button
+                    startStopBtn.classList.remove('bg-red-600', 'hover:bg-red-700', 'bg-gray-400');
                     startStopBtn.classList.add('bg-green-600', 'hover:bg-green-700');
+                    startStopBtn.classList.remove('hidden'); // Ensure hidden class is removed just in case
 
                     statusMessage.textContent = `Recording finished. Video Resolution: ${video.videoWidth}x${video.videoHeight}. Ready to record again.`;
                     showModal('Recording Complete', 'Your video has been saved! You can download it now.');
-                    // The video stream and drawFrame loop are intentionally NOT stopped here.
                 };
 
                 mediaRecorder.start();
                 recording = true;
                 startStopBtn.textContent = "Stop Recording";
-                startStopBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
+                startStopBtn.classList.remove('bg-green-600', 'hover:bg-green-700', 'bg-gray-400');
                 startStopBtn.classList.add('bg-red-600', 'hover:bg-red-700');
+                startStopBtn.disabled = false; // Ensure it's enabled for stopping
                 downloadLink.classList.add('hidden');
                 statusMessage.textContent = "Recording...";
 
             } else {
-                // --- STOP RECORDING ---
+                // --- STOP RECORDING FIX: Disable button and change text/color during processing ---
                 mediaRecorder.stop();
                 recording = false;
-                // Temporarily hide the button while processing the data,
-                // it will be revealed and reset in mediaRecorder.onstop
+
+                // Change UI to reflect processing state: disable and grey out.
                 startStopBtn.textContent = "Processing...";
-                startStopBtn.classList.add('hidden');
+                startStopBtn.disabled = true; // Disable interaction
+                startStopBtn.classList.remove('bg-red-600', 'hover:bg-red-700');
+                startStopBtn.classList.add('bg-gray-400'); // Use neutral color
 
             }
         });
