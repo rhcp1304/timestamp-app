@@ -149,8 +149,8 @@
                 statusMessage.textContent = `Recording finished. Video Resolution: ${video.videoWidth}x${video.videoHeight}. Ready to record again.`;
                 showModal('Recording Complete', 'Your video has been saved! You can download it now.');
             } else {
-                statusMessage.textContent = `Error: Processing timed out. Please try recording again.`;
-                showModal('Processing Failed', 'The video file could not be finalized in time (5s timeout). Please try a shorter recording.');
+                statusMessage.textContent = `Error: Processing timed out (10s limit). Please try recording again.`;
+                showModal('Processing Failed', 'The video file could not be finalized in time. Please try a shorter recording or use a lower resolution.');
             }
         }
 
@@ -330,11 +330,11 @@
                 statusMessage.textContent = "Processing video file...";
                 downloadLink.classList.add('hidden'); // Ensure download link is hidden during processing
 
-                // Set a timeout fallback (5 seconds). If onstop doesn't fire, force UI reset.
+                // Set a timeout fallback (increased to 10 seconds). If onstop doesn't fire, force UI reset.
                 processingTimeout = setTimeout(() => {
-                    console.error("Processing timeout reached. Forcing UI reset.");
+                    console.error("Processing timeout reached (10s). Forcing UI reset.");
                     resetRecordingState(false); // Signal failure/timeout
-                }, 5000);
+                }, 10000);
             }
         });
 
