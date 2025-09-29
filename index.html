@@ -105,7 +105,7 @@
 
         let mediaRecorder;
         let recordedChunks = [];
-        let videoStream;
+        let fullMediaStream; // Renamed for clarity: holds the full stream (video + audio)
         let geolocationWatcher;
         let lat = null;
         let lon = null;
@@ -227,18 +227,25 @@
 
         // Get video stream and start the drawing loop
         async function getVideoStream() {
-            // Stop existing stream tracks if they are active before requesting a new stream
-            if (videoStream) {
-                videoStream.getTracks().forEach(track => track.stop());
+            // Stop existing tracks from the full stream before requesting a new stream
+            if (fullMediaStream) {
+                fullMediaStream.getTracks().forEach(track => track.stop());
             }
 
             try {
-                videoStream = await navigator.mediaDevices.getUserMedia({
+                // 1. Get the full stream (video + audio)
+                fullMediaStream = await navigator.mediaDevices.getUserMedia({
                     // Request a common high-definition resolution
                     video: { facingMode: facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
                     audio: true
                 });
-                video.srcObject = videoStream;
+
+                // 2. Create a video-only stream for the preview element (#video-stream)
+                // This prevents the video element from playing back audio and causing feedback.
+                const videoTrack = fullMediaStream.getVideoTracks()[0];
+                const videoOnlyStream = new MediaStream([videoTrack]);
+
+                video.srcObject = videoOnlyStream;
                 video.onloadedmetadata = () => {
                     video.play();
                     // Start the drawing loop only once stream is loaded
@@ -285,7 +292,24 @@
                 };
 
                 const canvasStream = canvas.captureStream(30);
-                mediaRecorder = new MediaRecorder(canvasStream, options);
+
+                // 1. Get the video track from the canvas
+                const videoTrackToRecord = canvasStream.getVideoTracks()[0];
+
+                // 2. Create the composite stream for recording
+                const compositeStream = new MediaStream([videoTrackToRecord]);
+
+                // 3. Add the microphone audio track from the original stream
+                if (fullMediaStream && fullMediaStream.getAudioTracks().length > 0) {
+                    const audioTrackToRecord = fullMediaStream.getAudioTracks()[0];
+                    compositeStream.addTrack(audioTrackToRecord);
+                } else {
+                    console.warn("Audio track not found. Recording video only.");
+                }
+
+                // 4. Initialize MediaRecorder with the composite stream
+                mediaRecorder = new MediaRecorder(compositeStream, options);
+
                 recordedChunks = [];
 
                 mediaRecorder.ondataavailable = (event) => {
@@ -355,9 +379,9 @@
                 cancelAnimationFrame(animationFrameId);
                 animationFrameId = null; // Prevent subsequent cancellation attempts
             }
-            if (videoStream) {
-                videoStream.getTracks().forEach(track => track.stop());
-                videoStream = null;
+            if (fullMediaStream) {
+                fullMediaStream.getTracks().forEach(track => track.stop());
+                fullMediaStream = null;
             }
             if (geolocationWatcher) {
                 navigator.geolocation.clearWatch(geolocationWatcher);
