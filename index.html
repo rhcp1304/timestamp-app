@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Logger</title>
-    <!-- Add manifest.json for PWA functionality -->
+    <title>Video Logger - High Quality</title>
     <link rel="manifest" href="/manifest.json">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -19,6 +18,7 @@
             height: 100vh;
         }
         video, canvas {
+            /* The CSS width ensures it fits the screen, while JS sets the high resolution for drawing */
             max-width: 100%;
             border-radius: 0.75rem;
             box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
@@ -34,15 +34,19 @@
             background-color: #2D2D2D;
             border: 1px solid #444;
         }
+        /* Custom size for camera view in case native resolution is very large */
+        #video-canvas {
+            width: 100%;
+            max-width: 800px; /* Limit display size for responsiveness */
+            height: auto;
+        }
     </style>
 </head>
 <body class="flex items-center justify-center p-4">
     <div class="container flex flex-col items-center justify-center p-4 space-y-4">
-        <h1 class="text-3xl sm:text-4xl font-bold mb-4 text-center">Video Logger</h1>
+        <h1 class="text-3xl sm:text-4xl font-bold mb-4 text-center">Video Logger (High Quality)</h1>
         <div class="relative w-full max-w-2xl">
-            <!-- Video element to capture the stream -->
-            <video id="video-stream" class="hidden w-full h-auto"></video>
-            <!-- Canvas element to draw the video and overlays -->
+            <video id="video-stream" class="hidden w-full h-auto" playsinline muted></video>
             <canvas id="video-canvas" class="w-full aspect-[4/3] sm:aspect-video"></canvas>
         </div>
 
@@ -72,7 +76,6 @@
         </div>
     </div>
 
-    <!-- Custom Modal for Alerts -->
     <div id="message-modal" class="fixed inset-0 z-50 flex items-center justify-center hidden">
         <div class="message-box p-6 rounded-lg shadow-xl max-w-sm w-full mx-4">
             <h3 id="modal-title" class="text-xl font-bold mb-2"></h3>
@@ -84,10 +87,6 @@
     </div>
 
     <script>
-        // Log level for Firebase debugging, but not used in this app since we don't use Firestore
-        // import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        // setLogLevel('Debug');
-
         const video = document.getElementById('video-stream');
         const canvas = document.getElementById('video-canvas');
         const context = canvas.getContext('2d');
@@ -110,7 +109,6 @@
         let animationFrameId;
         let facingMode = 'user'; // 'user' for front camera, 'environment' for back
 
-        // Utility function to show a custom modal instead of alert()
         function showModal(title, message) {
             modalTitle.textContent = title;
             modalMessage.textContent = message;
@@ -121,62 +119,80 @@
             messageModal.classList.add('hidden');
         });
 
-        // Set up video and canvas to have the same aspect ratio
+        // ⭐ IMPROVEMENT: Set canvas dimensions to match native video resolution
         function setCanvasDimensions() {
             if (video.videoWidth > 0 && video.videoHeight > 0) {
-                const aspectRatio = video.videoWidth / video.videoHeight;
-                const canvasWidth = canvas.clientWidth;
-                canvas.width = canvasWidth;
-                canvas.height = canvasWidth / aspectRatio;
+                // Set the canvas's internal drawing surface size to the actual video resolution
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                // The CSS will handle scaling this high-resolution canvas to fit the screen
             }
         }
 
-        // Main animation loop to draw video, timestamp, and GPS data on the canvas
         function drawFrame() {
             if (video.videoWidth > 0 && video.videoHeight > 0) {
-                setCanvasDimensions();
+                setCanvasDimensions(); // Ensure dimensions are set correctly every frame
                 context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-                // Add timestamp
-                const now = new Date();
-                const timestampText = now.toLocaleString();
-                context.font = 'bold 20px Inter, sans-serif';
-                context.fillStyle = 'rgba(0, 0, 0, 0.5)';
-                context.fillRect(10, canvas.height - 40, context.measureText(timestampText).width + 20, 30);
-                context.fillStyle = 'white';
-                context.fillText(timestampText, 20, canvas.height - 20);
+                // Calculate font size based on canvas height for responsiveness
+                const fontSize = Math.max(16, canvas.height / 30);
+                context.font = `bold ${fontSize}px Inter, sans-serif`;
 
-                // Add GPS coordinates
+                // Overlay text settings
+                const padding = 10;
+                const textX = padding;
+                let textY = canvas.height - padding;
+
+                context.fillStyle = 'rgba(0, 0, 0, 0.5)'; // Semi-transparent background
+
+                // Add GPS coordinates (bottom-most text)
                 if (lat !== null && lon !== null) {
                     const gpsText = `Lat: ${lat.toFixed(5)}, Lon: ${lon.toFixed(5)}`;
-                    context.font = 'bold 20px Inter, sans-serif';
-                    context.fillStyle = 'rgba(0, 0, 0, 0.5)';
-                    context.fillRect(10, canvas.height - 80, context.measureText(gpsText).width + 20, 30);
+                    const textMetrics = context.measureText(gpsText);
+                    const boxHeight = fontSize + padding;
+                    const boxWidth = textMetrics.width + 2 * padding;
+
+                    context.fillRect(textX, textY - boxHeight, boxWidth, boxHeight);
                     context.fillStyle = 'white';
-                    context.fillText(gpsText, 20, canvas.height - 60);
+                    context.fillText(gpsText, textX + padding, textY - padding);
+                    textY -= (boxHeight + padding / 2); // Move up for the next line
                 }
+
+                // Add timestamp (above GPS or bottom-most if no GPS)
+                const now = new Date();
+                const timestampText = now.toLocaleString();
+                const textMetrics = context.measureText(timestampText);
+                const boxHeight = fontSize + padding;
+                const boxWidth = textMetrics.width + 2 * padding;
+
+                context.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                context.fillRect(textX, textY - boxHeight, boxWidth, boxHeight);
+                context.fillStyle = 'white';
+                context.fillText(timestampText, textX + padding, textY - padding);
             }
             animationFrameId = requestAnimationFrame(drawFrame);
         }
 
-        // Get video stream and start the drawing loop
         async function getVideoStream() {
-            // Stop existing stream if it exists
             if (videoStream) {
                 videoStream.getTracks().forEach(track => track.stop());
             }
 
             try {
+                // Request video and audio
                 videoStream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: facingMode }, // Use the current facingMode
+                    // Use a common high-definition resolution for better quality
+                    video: { facingMode: facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
                     audio: true
                 });
                 video.srcObject = videoStream;
                 video.onloadedmetadata = () => {
                     video.play();
+                    // Set initial dimensions and start drawing
+                    setCanvasDimensions();
                     requestAnimationFrame(drawFrame);
                 };
-                statusMessage.textContent = "Ready to record.";
+                statusMessage.textContent = "Ready to record. Video Resolution: " + video.videoWidth + "x" + video.videoHeight;
             } catch (err) {
                 console.error("Error accessing video stream:", err);
                 statusMessage.textContent = "Error: Camera access denied or not available.";
@@ -184,17 +200,16 @@
             }
         }
 
-        // Get live GPS coordinates
         function startGeolocationWatcher() {
             if ("geolocation" in navigator) {
                 geolocationWatcher = navigator.geolocation.watchPosition(
                     (position) => {
                         lat = position.coords.latitude;
                         lon = position.coords.longitude;
-                        statusMessage.textContent = `GPS Data: Lat ${lat.toFixed(5)}, Lon ${lon.toFixed(5)}`;
+                        statusMessage.textContent = `GPS Data: Lat ${lat.toFixed(5)}, Lon ${lon.toFixed(5)}. Ready to record.`;
                     },
                     (error) => {
-                        console.error("Geolocation error:", error);
+                        // ... (Error handling remains the same)
                         let errorMessage = "Unable to get location data. Please enable location services.";
                         if (error.code === error.PERMISSION_DENIED) {
                             errorMessage = "Location access was denied. Please grant permission in your browser settings.";
@@ -206,7 +221,7 @@
                         statusMessage.textContent = "Geolocation disabled or unavailable.";
                         showModal('Geolocation Error', errorMessage);
                     },
-                    { enableHighAccuracy: true }
+                    { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 } // High accuracy and reasonable timeout
                 );
             } else {
                 statusMessage.textContent = "Geolocation is not supported by your browser.";
@@ -216,9 +231,14 @@
 
         startStopBtn.addEventListener('click', () => {
             if (!recording) {
-                // Start recording
+                // ⭐ IMPROVEMENT: Set a high bitrate (5 Mbps) and specify VP9 codec
+                const options = {
+                    mimeType: 'video/webm; codecs=vp9',
+                    bitsPerSecond: 5000000 // 5 Megabits per second
+                };
+
                 const canvasStream = canvas.captureStream(30); // 30 FPS
-                mediaRecorder = new MediaRecorder(canvasStream, { mimeType: 'video/webm' });
+                mediaRecorder = new MediaRecorder(canvasStream, options);
                 recordedChunks = [];
 
                 mediaRecorder.ondataavailable = (event) => {
@@ -233,8 +253,13 @@
                     downloadLink.href = videoURL;
                     downloadLink.classList.remove('hidden');
                     startStopBtn.classList.remove('hidden');
-                    showModal('Recording Complete', 'Your video has been saved! You can download it now.');
-                    stopRecording();
+
+                    // Reset button style
+                    startStopBtn.textContent = "Start Recording";
+                    startStopBtn.classList.remove('bg-red-600', 'hover:bg-red-700');
+                    startStopBtn.classList.add('bg-green-600', 'hover:bg-green-700');
+
+                    showModal('Recording Complete', 'Your high-quality video has been processed! Download it now.');
                 };
 
                 mediaRecorder.start();
@@ -265,9 +290,8 @@
 
 
         function stopRecording() {
-            if (animationFrameId) {
-                cancelAnimationFrame(animationFrameId);
-            }
+            // No need to stop the animation frame or location watcher here, as they provide the overlays.
+            // The unmounting function (window.onbeforeunload) handles a full stop.
             if (videoStream) {
                 videoStream.getTracks().forEach(track => track.stop());
             }
@@ -276,14 +300,13 @@
             }
         }
 
-        // PWA Setup
-        // This dynamically creates the manifest file and registers the service worker
+        // PWA Setup (remains the same)
         window.onload = function() {
             // Dynamically create a manifest.json file
             const manifest = {
-                "name": "Video Logger",
-                "short_name": "VideoLogger",
-                "description": "A simple video recorder with timestamp and GPS data.",
+                "name": "Video Logger HQ",
+                "short_name": "VideoLoggerHQ",
+                "description": "A high-quality video recorder with timestamp and GPS data.",
                 "start_url": "./",
                 "display": "standalone",
                 "background_color": "#121212",
@@ -305,7 +328,7 @@
             const manifestUrl = URL.createObjectURL(manifestBlob);
             document.querySelector('link[rel="manifest"]').href = manifestUrl;
 
-            // Register the service worker
+            // Register the service worker (minimal, for PWA installability)
             if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.register(
                     'data:application/javascript;base64,' + btoa(
@@ -325,6 +348,9 @@
         // Handle page unload to stop media tracks
         window.onbeforeunload = function() {
             stopRecording();
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
         };
     </script>
 </body>
